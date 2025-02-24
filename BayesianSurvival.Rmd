@@ -139,7 +139,69 @@ Bayint <- suppressWarnings(sampling(bayesian_survival_0, data = stan_data, iter 
 print(summary(Bayint)$summary)
 ```
 
-# 4. build up survival models with covariate
+# 4. build up survival models with covariates
 ```{r, echo=TRUE}
+# Step 1: simulated data generator
+# Number of observations
+N <- 100
+N_cens <- 20
+K <- 3
 
+# Generate random covariate data
+x <- matrix(rnorm(N * K), N, K)
+x_cens <- matrix(rnorm(N_cens * K), N_cens, K)
+
+# Define true parameters
+gamma_true <- c(0.5, -0.3, 0.8)
+
+# Generate survival times
+rate <- exp(x %*% gamma_true)
+t <- rexp(N, rate)
+
+# Generate censored survival times
+rate_cens <- exp(x_cens %*% gamma_true)
+t_cens <- rexp(N_cens, rate_cens)
+
+# Prepare the data for Stan
+stan_data <- list(
+  N = N,
+  t = t,
+  N_cens = N_cens,
+  t_cens = t_cens,
+  K = K,
+  x = x,
+  x_cens = x_cens
+)
+
+# Step 2: model setting and compiling
+code_bayesian_survival_withCovariate <- "
+  data { 
+    int<lower=0> N; // the number of uncensored observations
+    vector[N] t; // the times of the uncensored observations
+    int<lower=0> N_cens; // the number of censored items that are right censored at time t_cens
+    real<lower=0> t_cens; // it is only observed that the part survived until time t_cens.
+    
+    int<lower=0> K;
+    matrix[N, K] x;
+    matrix[N_cens, K] x_cens;
+  }
+  parameters {
+    vector[K] gamma;
+  }
+  model {
+    gamma ~ normal(0, 2);
+    t ~ exponential(exp(x * gamma));
+    target += exponential_lccdf(t_cens | exp(x_cens * gamma));
+  }
+"
+
+# compile the model
+bayesian_survival_withCovariate <- stan_model(model_name = "bayesian_survival_withCovariate", 
+                                         model_code = code_bayesian_survival_withCovariate)
+# Step 3: model fitting and output
+niter = 10000; nwarmup = 1000 
+Bayint_survival_withCovariate <- suppressWarnings(sampling(bayesian_survival_withCovariate, data = stan_data, iter = niter, 
+                                    warmup = nwarmup, thin = 10, chain = 1))
+#' Summary of the fit
+print(summary(Bayint_survival_withCovariate)$summary)
 ```
