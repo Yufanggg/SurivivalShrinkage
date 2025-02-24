@@ -18,19 +18,15 @@ library(readr)
 ```{r, echo=TRUE}
 # set the bayesian survival model
 # simple survival analysis without covariates
-# N: the number of uncensored observations
-# t: the times of the uncensored observations
-# N_cens: the number of censored items that are right censored at time t_cens
-# t_cens: it is only observed that the part survived untile time t_cens.
 
 ## The exponential survival model and the prior are coded directly using vectorized distribution and ccdf statements. 
 # The likelihood for rate lambda is just the density of exponential distribution for observed failure time. 
 code_bayesian_survival_0 <- "
   data { 
-    int<lower=0> N; 
-    vector[N] t; 
-    int<lower=0> N_cens;
-    real<lower=0> t_cens;
+    int<lower=0> N; // the number of uncensored observations
+    vector[N] t; // the times of the uncensored observations
+    int<lower=0> N_cens; // the number of censored items that are right censored at time t_cens
+    real<lower=0> t_cens; // it is only observed that the part survived until time t_cens.
   }
   parameters {
     real<lower=0> lambda;
@@ -91,7 +87,7 @@ stan_data <- list(
 
 #' Sampling from the model
 niter = 10000; nwarmup = 1000 
-Bayint <- suppressWarnings(sampling(stan_binint_brl_HalfCauchy, data = dat, iter = niter, 
+Bayint <- suppressWarnings(sampling(bayesian_survival_0, data = stan_data, iter = niter, 
                                     warmup = nwarmup, thin = 10, chain = 1))
 #' Summary of the fit
 print(summary(Bayint)$summary)
