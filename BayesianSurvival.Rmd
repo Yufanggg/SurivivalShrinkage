@@ -12,7 +12,6 @@ rm(list = ls())
 # install.packages("readr")
 library(rstan)
 library(readr)
-1+2
 ```
 
 # build up models
