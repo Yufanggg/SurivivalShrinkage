@@ -147,14 +147,14 @@ N <- 100
 N_cens <- 20
 # Define true parameters
 beta_true <- c(0.5, 1, 0.8)
-censoring_time <- 12 # Censoring time
+censoring_time <- 10 # Censoring time
 K <- 3
 
 # Generate random covariate data
 x_all <- matrix(rnorm(N * K), N, K)
 
 # Simulate survival times from an exponential distribution
-survival_times <- rexp(N, rate = exp(x %*% beta_true))
+survival_times <- rexp(N, rate = exp(x_all %*% beta_true))
 
 # Simulate censoring indicator (1 if censored, 0 if not)
 censored <- survival_times > censoring_time
@@ -170,10 +170,10 @@ stan_data <- list(
   N = nrow(simulated_data),
   t = simulated_data$observed_times,
   N_cens = sum(simulated_data$censored),
-  t_cens = 12, # Censoring time used in the simulation,
+  t_cens = censoring_time, # Censoring time used in the simulation,
   
   K = K,# the number of columns in the design matrix, i.e., coefficients
-  x = x_all[censored==0,],#;
+  x = x_all,#;
   x_cens = x_all[censored==1,]
 )
 
@@ -194,9 +194,9 @@ code_bayesian_survival_withCovariate <- "
     vector[K] beta;
   }
   model {
-    // beta ~ normal(0, 2);
+    beta ~ normal(0, 2);
     t ~ exponential(exp(x * beta));
-    target += N_cens + exponential_lccdf(t_cens | exp(x_cens * beta));
+    target += N_cens *exponential_lccdf(t_cens | exp(x_cens * beta));
   }
 "
 
