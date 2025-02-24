@@ -82,9 +82,9 @@ code_bayesian_survival_0 <- "
     
   }
   model {
-    t ~ exponential(lambda);
-    target += N_cens * exponential_lccdf(t_cens | lambda);
-    lambda ~ lognormal(0, 1); 
+    lambda ~ lognormal(0, 1); // prior
+    t ~ exponential(lambda); //
+    target += N_cens * exponential_lccdf(t_cens | lambda); //exponential_lccdf computes the log of the complementary cumulatve distribution for the exponential dirtibution, i.e., survival function P(X > t_cens)
   }
 "
 
@@ -218,22 +218,25 @@ print(summary(Bayint_survival_withCovariate)$summary)
 # Step 2: Bayesian model setting & compiling
 code_bayesian_PH_model <- "
   data { 
-    int<lower=0> N; // the number of uncensored observations
-    vector[N] t; // the times of the uncensored observations
-    int<lower=0> N_cens; // the number of censored items that are right censored at time t_cens
-    real<lower=0> t_cens; // it is only observed that the part survived until time t_cens.
+    int <lower=0> K; //num covariates
+    int <lower=0> N; // num uncensored obs
     
-    int<lower=0> K; // the number of columns in the design matrix, i.e., coefficients
-    matrix[N, K] x;
-    matrix[N_cens, K] x_cens;
+    vector[N] t; // event time (non-strict decreasing)
+    matrix[N, K] x; // covariates for uncensored obs
+    
+    int N_c; // num censored obs
+    real <lower=t[N]> t_c; // censoring time
+    matrix[N_c, K] x_c; // covariates for censored obs
   }
   parameters {
-    vector[K] beta;
+    vector[K] beta; // slopes without intercept
   }
   model {
-    beta ~ normal(0, 2);
-    t ~ exponential(exp(x * beta));
-    target += N_cens *exponential_lccdf(t_cens | exp(x_cens * beta));
+    beta ~ normal(0, 2); // prior
+    vector[N] log_theta = x * beta;
+    vector [N_c] log_theta_c = x_c * beta;
+    real log_denom = log_sum_exp(log_theta_c); //log_sum_exp is defined as the logarithm of the sum of exponentials of the input values
+    target += log_theta - log_denom;
   }
 "
 
