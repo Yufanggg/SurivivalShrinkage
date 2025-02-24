@@ -210,8 +210,9 @@ Bayint_survival_withCovariate <- suppressWarnings(sampling(bayesian_survival_wit
 #' Summary of the fit
 print(summary(Bayint_survival_withCovariate)$summary)
 ```
+# 5. Proportional Hazard (PH) Model
 
-# 5. Proportional Hazard Model with covariates
+## 5.2 PH model with covariates
 ```{r, echo=TRUE}
 # Step 1: simulated data generator
 
@@ -230,6 +231,45 @@ code_bayesian_PH_model <- "
   }
   parameters {
     vector[K] beta; // slopes without intercept
+  }
+  model {
+    beta ~ normal(0, 2); // prior
+    vector[N] log_theta = x * beta;
+    vector [N_c] log_theta_c = x_c * beta;
+    real log_denom = log_sum_exp(log_theta_c); //log_sum_exp is defined as the logarithm of the sum of exponentials of the input values
+    target += log_theta - log_denom;
+  }
+"
+
+# compile the model
+bayesian_PH_model <- stan_model(model_name = "bayesian_PH_model", 
+                                         model_code = code_bayesian_PH_model)
+
+# Step 3: Model fitting and summary
+niter = 10000; nwarmup = 1000 
+bayesian_PH_model_fit <- suppressWarnings(sampling(bayesian_PH_model, data = stan_data, iter = niter, 
+                                    warmup = nwarmup, thin = 10, chain = 1))
+#' Summary of the fit
+print(summary(bayesian_PH_model_fit)$summary)
+```
+
+## 5.1 Proportional Hazard Model without covariates
+```{r, echo=TRUE}
+# Step 1: simulated data generator
+
+# Step 2: Bayesian model setting & compiling
+code_bayesian_PH_model_no_covariate <- "
+  data { 
+    int <lower=0> K; //num covariates
+    int <lower=0> N; // num uncensored obs
+    
+    vector[N] t; // event time (non-strict decreasing)
+    
+    int N_c; // num censored obs
+    real <lower=t[N]> t_c; // censoring time
+  }
+  parameters {
+     real<lower=0> lambda; // slopes without intercept
   }
   model {
     beta ~ normal(0, 2); // prior
