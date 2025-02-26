@@ -21,13 +21,13 @@ source("./SurvivalDataGenerator.R")
 # 2. predefine a matrix
 ```{r, echo=TRUE}
 n_samples = 1000
-Betas = 3
+Betas = -3
 Design_matrix = as.matrix(rbinom(n_samples, 1, prob = 0.5))
-BaselinePara = 0.1
+BaselinePara = c(1, 2)
 
 
 stan_data = SurvivalDataGenerator(n_samples, Betas, Design_matrix, 
-                                  BaselinePara, BaselineDistr, BaselineDistr = "exponential")
+                                  BaselinePara, BaselineDistr = "weibull")
 
 # use the traditional coxph to verify that the data was correctly generated
 coxph(Surv(stan_data$obstime, stan_data$status) ~ stan_data$covariate)
