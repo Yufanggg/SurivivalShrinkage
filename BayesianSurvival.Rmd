@@ -65,54 +65,8 @@ print(summary(fit)$summary)
 summary(lm(y~x))
 ```
 
-# 3. build up no-covariate survival models
-```{r, echo=TRUE}
-## Step 1: get the simulated data
-stan_data = SurvivalDataGenerator(1000)
 
-## Step 2: set up and compile the bayesian model
-# set the bayesian survival model
-# simple survival analysis without covariates
-
-## The exponential survival model and the prior are coded directly using vectorized distribution and ccdf statements. 
-# The likelihood for rate lambda is just the density of exponential distribution for observed failure time. 
-code_bayesian_survival_0 <- "
-  data { 
-    int<lower=0> N; // the number of uncensored observations
-    vector[N] t; // the times of the uncensored observations
-    int<lower=0> N_cens; // the number of censored items that are right censored at time t_cens
-    vector[N_cens] t_cens; // it is only observed that the part survived until time t_cens.
-  }
-  parameters {
-    real<lower=0> lambda;
-    
-    
-  }
-  model {
-    lambda ~ lognormal(0, 1); // prior
-    t ~ exponential(lambda); //
-    target += N_cens * exponential_lccdf(t_cens | lambda); //exponential_lccdf computes the log of the complementary cumulatve distribution for the exponential dirtibution, i.e., survival function P(X > t_cens)
-  }
-"
-
-# compile the model
-
-pmt <- proc.time()
-bayesian_survival_0 <- stan_model(model_name = "bayesian_survival_0", 
-                                         model_code = code_bayesian_survival_0)
-proc.time()-pmt
-
-## Step 3: fit the model & give the model
-
-#' Sampling from the model
-niter = 10000; nwarmup = 1000 
-Bayint <- suppressWarnings(sampling(bayesian_survival_0, data = stan_data, iter = niter, 
-                                    warmup = nwarmup, thin = 10, chain = 1))
-#' Summary of the fit
-print(summary(Bayint)$summary)
-```
-
-# 4. build up survival models with binary covariates
+# 3. build up survival models with binary covariates
 ```{r, echo=TRUE}
 ## Step 1: simulated data generator
 stan_data2 = SurvivalDataGenerator(1000, anycovariate = "binary", beta = 0.3)
@@ -150,7 +104,7 @@ Bayint_survival_withCovariate <- suppressWarnings(sampling(bayesian_survival_wit
 #' Summary of the fit
 print(summary(Bayint_survival_withCovariate)$summary)
 ```
-# 5. build up survival models with continuous covariates
+# 4. build up survival models with continuous covariates
 ```{r, echo=TRUE}
 ## Step 1: simulated data generator
 stan_data3 = SurvivalDataGenerator(1000, anycovariate = "continuous", beta = 0.3)
