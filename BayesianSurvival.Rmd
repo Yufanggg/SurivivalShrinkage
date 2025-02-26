@@ -12,69 +12,29 @@ rm(list = ls())
 # install.packages("readr")
 library(rstan)
 library(readr)
+library(survival)
 # Set seed for reproducibility
 set.seed(42)
 source("./SurvivalDataGenerator.R")
 ```
 
-# 2. Start with Bayesian regression: alpha_true: 2.0, beta_true: 3.0, sigma_true: 1.0
+# 2. predefine a matrix
 ```{r, echo=TRUE}
-Bayesian_regression <- "
-data {
-  int<lower=0> N;
-  vector[N] x;
-  vector[N] y;
-  }
-parameters {
-  real alpha;
-  real beta;
-  real <lower=0> sigma;
-}
-model {
-  y ~ normal(alpha + beta * x, sigma);
-} "
+n_samples = 1000
+Betas = 3
+Design_matrix = as.matrix(rbinom(n_samples, 1, prob = 0.5))
+BaselinePara = 0.1
 
 
-# Compile the Stan model
-stan_model <- stan_model(model_code = Bayesian_regression)
+stan_data = SurvivalDataGenerator(n_samples, Betas, Design_matrix, 
+                                  BaselinePara, BaselineDistr, BaselineDistr = "exponential")
 
-
-# Generated simulated data for running models
-## Number of observations
-N <- 100
-## Generate random covariate data
-x <- rnorm(N, mean = 0, sd = 1)
-## Define true parameters
-alpha_true <- 2.0
-beta_true <- 3.0
-sigma_true <- 1.0
-## Generate response variable data with some noise
-y <- alpha_true + beta_true * x + rnorm(N, mean = 0, sd = sigma_true)
-## Create a list to store the generated data
-stan_data <- list(
-  N = N,
-  x = x,
-  y = y
-)
-## Run the sampling
-fit <- sampling(stan_model, data = stan_data, iter = 2000, warmup = 500, chains = 4, thin = 1)
-## Print the results
-print(fit)
-print(summary(fit)$summary)
-
-summary(lm(y~x))
+# use the traditional coxph to verify that the data was correctly generated
+coxph(Surv(stan_data$obstime, stan_data$status) ~ stan_data$covariate)
 ```
-
-
-# 3. build up survival models with binary covariates
+# 3. build up survival models with covariates
 ```{r, echo=TRUE}
-## Step 1: simulated data generator
-stan_data2 = SurvivalDataGenerator(1000, anycovariate = "binary", beta = 0.3)
-
-## Step 2: use the traditional 
-coxph(Surv(stan_data2$obstime, stan_data2$status) ~ stan_data2$covariate)
-# Step 2: model setting and compiling
-code_bayesian_survival_withCovariate <- "
+code_bayesian_survival_withCovariate_exponential <- "
   data { 
     int<lower=0> N; // the number of uncensored observations
     vector[N] t; // the times of the uncensored observations
@@ -97,7 +57,7 @@ code_bayesian_survival_withCovariate <- "
 
 # compile the model
 bayesian_survival_withCovariate <- stan_model(model_name = "bayesian_survival_withCovariate", 
-                                         model_code = code_bayesian_survival_withCovariate)
+                                         model_code = code_bayesian_survival_withCovariate_exponential)
 # Step 3: model fitting and output
 niter = 10000; nwarmup = 1000 
 Bayint_survival_withCovariate <- suppressWarnings(sampling(bayesian_survival_withCovariate, data = stan_data2, iter = niter, warmup = nwarmup, thin = 10, chain = 1))
