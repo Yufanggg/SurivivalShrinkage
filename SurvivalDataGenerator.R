@@ -2,67 +2,42 @@ set.seed(50234)
 library(KMsurv)
 library(survival)
 
-### Without any covariate
-# simulate survival time from an exponential distribution
-survtime <- rexp(500, 0.2)
+SurvivalDataGenerator = function(n, distribution = "exponential", 
+                                 anycovariate = "no"){
+  if (distribution == "exponential" & anycovariate == "no") {
+    # simulate survival time from an exponential distribution
+    survtime <- rexp(n, 0.2)
+    covariate <- NA
+  }
+  else if (distribution == "exponential" & anycovariate == "binary"){
+    # simulate survival time from an exponential distribution
+    survtime <- c(rexp(n/2, 0.2), rexp(n/2, 0.5))
+    covariate <- factor(rep(c("F", "M"), each = n/2))
+  }
+  
+  else if (distribution == "exponential" & anycovariate == "continuous"){
+    covariate = rnorm(1000)
+    betas = exp(0.5 * covariate)
+    survtime <- sapply(betas, function(beta) rexp(1, beta))
+  }
+  
+  # simulate censored data from an exponential distribution
+  censtime <- runif(n, 3, 6)
+  
+  # indicator variable
+  status <- as.numeric(survtime <= censtime) # the sum of status is the number of event
+  
+  # observed time
+  obstime <- survtime * status + censtime * (1 - status) 
+  
+  stan_data <- list(
+    N = n,
+    t = obstime,
+    N_cens = sum(status == 0),
+    t_cens = censtime, # Censoring time used in the simulation
+    covariate = covariate
+  )
+  return (stan_Data)
+}
 
-# simulate censored data from an exponential distribution
-censtime <- rexp(500, 0.1)
-
-# indicator variable
-status <- as.numeric(survtime <= censtime) # the sum of status is the number of event
-
-# observed time
-obstime <- survtime*status + censtime*(1-status) # the same with pmin(survtime, censtime)
-
-# plot the survival function S(t), Kaplann meier
-plot(survfit(Surv(obstime, status) ~ 1), conf.int = F, mark.time = F)
-# true survival function
-y <- seq(0, 30, by = 0.1)
-truesurv <- exp(-0.2*y)
-lines(y, truesurv, type = "l", col = "green")
-
-# plot F(t)
-plot(survfit(Surv(obstime, status) ~ 1), conf.int = F, mark.time = F, fun = "event")
-lines(y, 1 - truesurv, type = "l", col = "red")
-
-
-### Having a binary covariate
-# simulate survival time from an exponential distribution
-survtime <- c(rexp(500, 0.2), rexp(500, 0.5))
-
-# simulate censored data from an exponential distribution
-censtime <- runif(1000, 3, 6)
-
-# indicator variable
-status <- as.numeric(survtime <= censtime) # the sum of status is the number of event
-
-# observed time
-obstime <- survtime*status + censtime*(1-status) # the same with pmin(survtime, censtime)
-
-simulated_data <- data.frame(
-  obstime = obstime,
-  status = status,
-  group = factor(rep(c("F", "M"), each = 500))
-)
-
-# plot the survival function S(t), Kaplann meier
-plot(survfit(Surv(obstime, status) ~  simulated_data$group), conf.int = F, mark.time = F, data = simulated_data)
-coxph(Surv(obstime, status) ~  simulated_data$group)
-
-### Having a continuous covariate
-covariate = rnorm(1000)
-betas = exp(0.5 * covariate)
-survtime <- sapply(betas, function(beta) rexp(1, beta))
-
-# simulate censored data from an exponential distribution
-censtime <- runif(1000, 3, 6)
-
-# indicator variable
-status <- as.numeric(survtime <= censtime) # the sum of status is the number of event
-
-# observed time
-obstime <- survtime*status + censtime*(1-status) # the same with pmin(survtime, censtime)
-
-coxph(Surv(obstime, status) ~  covariate)
 
