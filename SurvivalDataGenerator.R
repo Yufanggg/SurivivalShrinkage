@@ -3,7 +3,7 @@ library(KMsurv)
 library(survival)
 
 SurvivalDataGenerator = function(n, distribution = "exponential", 
-                                 anycovariate = "no"){
+                                 anycovariate = "no", beta = "no"){
   if (distribution == "exponential" & anycovariate == "no") {
     # simulate survival time from an exponential distribution
     survtime <- rexp(n, 0.2)
@@ -11,14 +11,14 @@ SurvivalDataGenerator = function(n, distribution = "exponential",
   }
   else if (distribution == "exponential" & anycovariate == "binary"){
     # simulate survival time from an exponential distribution
-    survtime <- c(rexp(n/2, 0.2), rexp(n/2, 0.5))
+    survtime <- c(rexp(n/2, 0.2), rexp(n/2, 0.2 + beta))
     covariate <- factor(rep(c("F", "M"), each = n/2))
   }
   
   else if (distribution == "exponential" & anycovariate == "continuous"){
     covariate = rnorm(1000)
-    betas = exp(0.5 * covariate)
-    survtime <- sapply(betas, function(beta) rexp(1, beta))
+    lambdas = exp(beta * covariate)
+    survtime <- sapply(lambdas, function(lambda) rexp(1, lambda))
   }
   
   # simulate censored data from an exponential distribution
