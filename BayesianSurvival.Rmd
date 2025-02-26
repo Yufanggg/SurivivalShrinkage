@@ -14,6 +14,7 @@ library(rstan)
 library(readr)
 # Set seed for reproducibility
 set.seed(42)
+source("./SurvivalDataGenerator.R")
 ```
 
 # 2. Start with Bayesian regression: alpha_true: 2.0, beta_true: 3.0, sigma_true: 1.0
@@ -66,6 +67,10 @@ summary(lm(y~x))
 
 # 3. build up no-covariate survival models
 ```{r, echo=TRUE}
+## Step 1: get the simulated data
+stan_data = SurvivalDataGenerator(1000)
+
+## Step 2: set up and compile the bayesian model
 # set the bayesian survival model
 # simple survival analysis without covariates
 
@@ -76,7 +81,7 @@ code_bayesian_survival_0 <- "
     int<lower=0> N; // the number of uncensored observations
     vector[N] t; // the times of the uncensored observations
     int<lower=0> N_cens; // the number of censored items that are right censored at time t_cens
-    real<lower=0> t_cens; // it is only observed that the part survived until time t_cens.
+    vector[N_cens] t_cens; // it is only observed that the part survived until time t_cens.
   }
   parameters {
     real<lower=0> lambda;
@@ -97,41 +102,7 @@ bayesian_survival_0 <- stan_model(model_name = "bayesian_survival_0",
                                          model_code = code_bayesian_survival_0)
 proc.time()-pmt
 
-
-# get a simulated dataset & prepare it for stan
-
-# Load necessary libraries
-library(dplyr)
-
-# Parameters for the simulation
-N <- 100  # Number of observations
-lambda_true <- 0.1  # True rate parameter for the exponential distribution
-censoring_time <- 12  # Censoring time
-
-# Simulate survival times from an exponential distribution
-survival_times <- rexp(N, rate = lambda_true)
-
-# Simulate censoring indicator (1 if censored, 0 if not)
-censored <- survival_times > censoring_time
-observed_times <- ifelse(censored, censoring_time, survival_times)
-
-# Create a data frame to store the simulated data
-simulated_data <- data.frame(
-  observed_times = observed_times,
-  censored = as.integer(censored)
-)
-
-## prepare the simulated data for stan
-stan_data <- list(
-  N = nrow(simulated_data),
-  t = simulated_data$observed_times,
-  N_cens = sum(simulated_data$censored),
-  t_cens = 12 # Censoring time used in the simulation
-)
-```
-
-# 3.1 fit the model on the data
-```{r, echo=TRUE}
+## Step 3: fit the model & give the model
 
 #' Sampling from the model
 niter = 10000; nwarmup = 1000 
@@ -141,53 +112,20 @@ Bayint <- suppressWarnings(sampling(bayesian_survival_0, data = stan_data, iter 
 print(summary(Bayint)$summary)
 ```
 
-# 4. build up survival models with covariates
+# 4. build up survival models with binary covariates
 ```{r, echo=TRUE}
-# Step 1: simulated data generator
-# Number of observations
-N <- 100
-N_cens <- 20
-# Define true parameters
-beta_true <- c(0.5, 1, 10)
-censoring_time <- 10 # Censoring time
-K <- 3
+## Step 1: simulated data generator
+stan_data2 = SurvivalDataGenerator(1000, anycovariate = "binary", beta = 0.3)
 
-# Generate random covariate data
-x_all <- matrix(rnorm(N * K), N, K)
-x_cens <- matrix(rnorm(N_cens * K), N_cens, K)
-
-# Simulate survival times from an exponential distribution
-survival_times <- rexp(N, rate = exp(x_all %*% beta_true))
-
-# Simulate censoring indicator (1 if censored, 0 if not)
-censored <- survival_times > censoring_time
-observed_times <- ifelse(censored, censoring_time, survival_times)
-
-# Create a data frame to store the simulated data
-simulated_data <- data.frame(
-  observed_times = observed_times,
-  censored = as.integer(censored)
-)
-
-stan_data <- list(
-  N = nrow(simulated_data),
-  t = simulated_data$observed_times,
-  N_cens = sum(simulated_data$censored),
-  t_cens = censoring_time, # Censoring time used in the simulation,
-  
-  K = K,# the number of columns in the design matrix, i.e., coefficients
-  x = x_all,#;
-  x_cens = x_cens
-)
-
-
+## Step 2: use the traditional 
+coxph(Surv(stan_data2$obstime, stan_data2$status) ~ stan_data2$covariate)
 # Step 2: model setting and compiling
 code_bayesian_survival_withCovariate <- "
   data { 
     int<lower=0> N; // the number of uncensored observations
     vector[N] t; // the times of the uncensored observations
     int<lower=0> N_cens; // the number of censored items that are right censored at time t_cens
-    real<lower=0> t_cens; // it is only observed that the part survived until time t_cens.
+    vector[N_cens] t_cens; // it is only observed that the part survived until time t_cens.
     
     int<lower=0> K; // the number of columns in the design matrix, i.e., coefficients
     matrix[N, K] x;
@@ -208,56 +146,60 @@ bayesian_survival_withCovariate <- stan_model(model_name = "bayesian_survival_wi
                                          model_code = code_bayesian_survival_withCovariate)
 # Step 3: model fitting and output
 niter = 10000; nwarmup = 1000 
-Bayint_survival_withCovariate <- suppressWarnings(sampling(bayesian_survival_withCovariate, data = stan_data, iter = niter, 
-                                    warmup = nwarmup, thin = 10, chain = 1))
+Bayint_survival_withCovariate <- suppressWarnings(sampling(bayesian_survival_withCovariate, data = stan_data2, iter = niter, warmup = nwarmup, thin = 10, chain = 1))
 #' Summary of the fit
 print(summary(Bayint_survival_withCovariate)$summary)
-
-# test the model with cox regression
-library(survival)
-coxph(Surv(observed_times, censored) ~ rbind(x_all, x_cens))
 ```
+# 5. build up survival models with continuous covariates
+```{r, echo=TRUE}
+## Step 1: simulated data generator
+stan_data3 = SurvivalDataGenerator(1000, anycovariate = "continuous", beta = 0.3)
+
+## Step 2: use the traditional coxph regression to validate the data simulation
+coxph(Surv(stan_data3$obstime, stan_data3$status) ~ stan_data3$covariate)
+# Step 2: model setting and compiling
+code_bayesian_survival_withCCovariate <- "
+  data { 
+    int<lower=0> N; // the number of uncensored observations
+    vector[N] t; // the times of the uncensored observations
+    int<lower=0> N_cens; // the number of censored items that are right censored at time t_cens
+    vector[N_cens] t_cens; // it is only observed that the part survived until time t_cens.
+    
+    int<lower=0> K; // the number of columns in the design matrix, i.e., coefficients
+    matrix[N, K] x;
+    matrix[N_cens, K] x_cens;
+  }
+  parameters {
+    vector[K] beta;
+  }
+  model {
+    beta ~ normal(0, 2);
+    t ~ exponential(exp(x * beta));
+    target += exponential_lccdf(t_cens | exp(x_cens * beta));
+  }
+"
+
+# compile the model
+bayesian_survival_withCCovariate <- stan_model(model_name = "bayesian_survival_withCCovariate", 
+                                         model_code = code_bayesian_survival_withCCovariate)
+# Step 3: model fitting and output
+niter = 10000; nwarmup = 1000 
+Bayint_survival_withCCovariate <- suppressWarnings(sampling(bayesian_survival_withCCovariate, data = stan_data3, iter = niter, warmup = nwarmup, thin = 10, chain = 1))
+#' Summary of the fit
+print(summary(Bayint_survival_withCCovariate)$summary)
+```
+
 # 5. Proportional Hazard (PH) Model
 
 ## 5.1 PH model with covariates via partial likelihood function
 ```{r, echo=TRUE}
 # Step 1: simulated data generator
-## Define parameters for the simulated data
-N <- 100  # number of uncensored observations
-N_cens <- 50  # number of censored observations
-K <- 3  # number of covariates
+stan_data4 = SurvivalDataGenerator(1000, distribution = "exponential_", anycovariate = "continuous", beta = 0.3)
 
-## Generate covariates for uncensored and censored observations
-x_all <- matrix(rnorm(N * K), N, K)
+# Step 2: use traditional coxph regression to validate that data is well generated
+coxph(Surv(stan_data4$obstime, stan_data4$status) ~ stan_data4$covariate)
 
-## Simulated survival times 
-beta_true <- c(0.5, 0.9, 1.3)
-censoring_time <- 10 # Censoring time
-log_theta <- x_all %*% beta_true
-survival_times <- rexp(N, rate = exp(log_theta))
-
-# Simulated censoring indicator (1 if censored, 0 if not)
-censored <- survival_times > censoring_time
-observed_times <- ifelse(censored, censoring_time, survival_times)
-
-# Create a data frame to store the simulated data
-simulated_data <- data.frame(
-  observed_times = observed_times,
-  censored = as.integer(censored)
-)
-
-stan_data <- list(
-  N = nrow(simulated_data),
-  t = simulated_data$observed_times,
-  N_cens = sum(simulated_data$censored),
-  t_cens = censoring_time, # Censoring time used in the simulation,
-  K = K,
-  x = x_all,
-  x_cens = x_all[censored==1,]
-)
-
-
-# Step 2: Bayesian model setting & compiling
+# Step 3: Bayesian model setting & compiling
 code_bayesian_PH_model <- "
   data { 
     int <lower=0> K; //num covariates
@@ -267,7 +209,7 @@ code_bayesian_PH_model <- "
     matrix[N, K] x; // covariates for uncensored obs
     
     int N_cens; // num censored obs
-    real <lower=t[N]> t_cens; // censoring time
+    vector[N_cens] t_cens; // censoring time
     matrix[N_cens, K] x_cens; // covariates for censored obs
   }
   parameters {
@@ -289,7 +231,7 @@ bayesian_PH_model <- stan_model(model_name = "bayesian_PH_model",
 
 # Step 3: Model fitting and summary
 niter = 10000; nwarmup = 1000 
-bayesian_PH_model_fit <- suppressWarnings(sampling(bayesian_PH_model, data = stan_data, iter = niter, 
+bayesian_PH_model_fit <- suppressWarnings(sampling(bayesian_PH_model, data = stan_data4, iter = niter, 
                                     warmup = nwarmup, thin = 10, chain = 1))
 #' Summary of the fit
 print(summary(bayesian_PH_model_fit)$summary)
