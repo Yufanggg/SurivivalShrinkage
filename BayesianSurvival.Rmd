@@ -5,7 +5,7 @@ date: "2025-02-19"
 output: pdf_document
 ---
 
-# 1. load packages
+# STEP 1. load packages
 ```{r, echo=TRUE}
 rm(list = ls())
 # install.packages("rstan")
@@ -18,7 +18,7 @@ set.seed(42)
 source("./SurvivalDataGenerator.R")
 ```
 
-# 2. predefine a design matrix with one column
+# STEP 2. predefine a design matrix with one column 
 ```{r, echo=TRUE}
 n_samples = 1000
 Betas = 1
@@ -27,93 +27,15 @@ BaselinePara = c(0.1, 0.2)
 
 
 stan_data = SurvivalDataGenerator(n_samples, Betas, Design_matrix, 
-                                  BaselinePara, BaselineDistr = "Gompertz")
+                                  BaselinePara, BaselineDistr = "exponential") # exponential, weibull, and Gompertz
 
 # use the traditional coxph to verify that the data was correctly generated
 coxph(Surv(stan_data$obstime, stan_data$status) ~ stan_data$covariate)
 ```
-# 3. build up survival models with covariates
+## Conclusion for STEP 2: the betas are correctly estimated via traditional cox regression, meaning that data was correctly generated.
+
+# STEP 3. Proportional Hazard (PH) Model with covariates via partial likelihood function
 ```{r, echo=TRUE}
-code_bayesian_survival_withCovariate_exponential <- "
-  data { 
-    int<lower=0> N; // the number of uncensored observations
-    vector[N] t; // the times of the uncensored observations
-    int<lower=0> N_cens; // the number of censored items that are right censored at time t_cens
-    vector[N_cens] t_cens; // it is only observed that the part survived until time t_cens.
-    
-    int<lower=0> K; // the number of columns in the design matrix, i.e., coefficients
-    matrix[N, K] x;
-    matrix[N_cens, K] x_cens;
-  }
-  parameters {
-    vector[K] beta;
-  }
-  model {
-    beta ~ normal(0, 2);
-    t ~ exponential(exp(x * beta));
-    target += exponential_lccdf(t_cens | exp(x_cens * beta));
-  }
-"
-
-# compile the model
-bayesian_survival_withCovariate <- stan_model(model_name = "bayesian_survival_withCovariate", 
-                                         model_code = code_bayesian_survival_withCovariate_exponential)
-# Step 3: model fitting and output
-niter = 10000; nwarmup = 1000 
-Bayint_survival_withCovariate <- suppressWarnings(sampling(bayesian_survival_withCovariate, data = stan_data2, iter = niter, warmup = nwarmup, thin = 10, chain = 1))
-#' Summary of the fit
-print(summary(Bayint_survival_withCovariate)$summary)
-```
-# 4. build up survival models with continuous covariates
-```{r, echo=TRUE}
-## Step 1: simulated data generator
-stan_data3 = SurvivalDataGenerator(1000, anycovariate = "continuous", beta = 0.3)
-
-## Step 2: use the traditional coxph regression to validate the data simulation
-coxph(Surv(stan_data3$obstime, stan_data3$status) ~ stan_data3$covariate)
-# Step 2: model setting and compiling
-code_bayesian_survival_withCCovariate <- "
-  data { 
-    int<lower=0> N; // the number of uncensored observations
-    vector[N] t; // the times of the uncensored observations
-    int<lower=0> N_cens; // the number of censored items that are right censored at time t_cens
-    vector[N_cens] t_cens; // it is only observed that the part survived until time t_cens.
-    
-    int<lower=0> K; // the number of columns in the design matrix, i.e., coefficients
-    matrix[N, K] x;
-    matrix[N_cens, K] x_cens;
-  }
-  parameters {
-    vector[K] beta;
-  }
-  model {
-    beta ~ normal(0, 2);
-    t ~ exponential(exp(x * beta));
-    target += exponential_lccdf(t_cens | exp(x_cens * beta));
-  }
-"
-
-# compile the model
-bayesian_survival_withCCovariate <- stan_model(model_name = "bayesian_survival_withCCovariate", 
-                                         model_code = code_bayesian_survival_withCCovariate)
-# Step 3: model fitting and output
-niter = 10000; nwarmup = 1000 
-Bayint_survival_withCCovariate <- suppressWarnings(sampling(bayesian_survival_withCCovariate, data = stan_data3, iter = niter, warmup = nwarmup, thin = 10, chain = 1))
-#' Summary of the fit
-print(summary(Bayint_survival_withCCovariate)$summary)
-```
-
-# 5. Proportional Hazard (PH) Model
-
-## 5.1 PH model with covariates via partial likelihood function
-```{r, echo=TRUE}
-# Step 1: simulated data generator
-stan_data4 = SurvivalDataGenerator(1000, distribution = "exponential_", anycovariate = "continuous", beta = 0.3)
-
-# Step 2: use traditional coxph regression to validate that data is well generated
-coxph(Surv(stan_data4$obstime, stan_data4$status) ~ stan_data4$covariate)
-
-# Step 3: Bayesian model setting & compiling
 code_bayesian_PH_model <- "
   data { 
     int <lower=0> K; //num covariates
@@ -145,11 +67,13 @@ bayesian_PH_model <- stan_model(model_name = "bayesian_PH_model",
 
 # Step 3: Model fitting and summary
 niter = 10000; nwarmup = 1000 
-bayesian_PH_model_fit <- suppressWarnings(sampling(bayesian_PH_model, data = stan_data4, iter = niter, 
+bayesian_PH_model_fit <- suppressWarnings(sampling(bayesian_PH_model, data = stan_data, iter = niter, 
                                     warmup = nwarmup, thin = 10, chain = 1))
 #' Summary of the fit
 print(summary(bayesian_PH_model_fit)$summary)
 ```
+## Conclusion for STEP 3: the betas are correctly estimated via bayesian cox regression, meaning that bayesian cox regression was correctly defined.
+
 
 
 # 6. Accelerated failure time (AFT) model with covariates
