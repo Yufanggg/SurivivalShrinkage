@@ -18,16 +18,16 @@ set.seed(42)
 source("./SurvivalDataGenerator.R")
 ```
 
-# 2. predefine a matrix
+# 2. predefine a design matrix with one column
 ```{r, echo=TRUE}
 n_samples = 1000
-Betas = -3
-Design_matrix = as.matrix(rbinom(n_samples, 1, prob = 0.5))
-BaselinePara = c(1, 2)
+Betas = 1
+Design_matrix = as.matrix(rbinom(n_samples, 1, prob = 0.5)) #rnorm(n_samples))
+BaselinePara = c(0.1, 0.2)
 
 
 stan_data = SurvivalDataGenerator(n_samples, Betas, Design_matrix, 
-                                  BaselinePara, BaselineDistr = "weibull")
+                                  BaselinePara, BaselineDistr = "Gompertz")
 
 # use the traditional coxph to verify that the data was correctly generated
 coxph(Surv(stan_data$obstime, stan_data$status) ~ stan_data$covariate)

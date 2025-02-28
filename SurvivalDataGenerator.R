@@ -2,32 +2,36 @@ set.seed(50234)
 library(KMsurv)
 library(survival)
 
+## Reference paper: Generating survival times to simulate Cox proportional hazards models with time-varying covariates
 SurvivalDataGenerator = function(n_samples, Betas, Design_matrix, BaselinePara, BaselineDistr = "exponential"){
-  if (BaselineDistr == "exponential"){
-    lambda = BaselinePara
-    Baseline_survival_time = rexp(n_samples, rate = lambda)
+  u = runif(n_samples, 0, 1)
+  scale = BaselinePara[1]
+  if (scale <= 0) stop("Error: The scale must be greater than 0")
+  survival_time = -log(u) / (scale * exp(Design_matrix %*% Betas)) # for exponential baseline distribution
+  
+  if (BaselineDistr == "weibull") {
+    shape = BaselinePara[2]
+    if (shape <= 0) stop("Error: The scale must be greater than 0 for weibull baseline distribution")
+    survival_time = survival_time^(1/shape)
   }
   
-  else if (BaselineDistr == "weibull"){
-    shape = BaselinePara[1]; scale = BaselinePara[2]
-    Baseline_survival_time = rweibull(n_samples, shape = shape,  scale = scale)
-    
+  else if (BaselineDistr == "Gompertz") {
+    shape = BaselinePara[2]
+    survival_time = (1 / shape) * log(1 + shape * survival_time)
   }
-  
-  Survival_time_covarite = Baseline_survival_time * exp(Design_matrix %*% Betas)
   
   # simulate censored data from a uniform distribution
   censtime <- runif(n_samples, 3, 6)
   
   # indicator variable
-  status <- as.numeric(Survival_time_covarite <= censtime) # the sum of status is the number of event
+  status <- as.numeric(survival_time <= censtime) # the sum of status is the number of event
   
   # observed time
-  obstime <- Survival_time_covarite * status + censtime * (1 - status) 
+  obstime <- survival_time * status + censtime * (1 - status) 
   
   stan_data <- list(
     N = sum(status == 1),
-    t = Survival_time_covarite[status == 1],
+    t = survival_time[status == 1],
     N_cens = sum(status == 0),
     t_cens = censtime[status == 0], # Censoring time used in the simulation
     K = dim(Design_matrix)[2], # number of covariates,
