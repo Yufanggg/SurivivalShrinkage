@@ -27,7 +27,7 @@ BaselinePara = c(0.1, 0.2)
 
 
 stan_data = SurvivalDataGenerator(n_samples, Betas, Design_matrix, 
-                                  BaselinePara, BaselineDistr = "exponential") # exponential, weibull, and Gompertz
+                                  BaselinePara, BaselineDistr = "weibull") # exponential, weibull, and Gompertz
 
 # use the traditional coxph to verify that the data was correctly generated
 coxph(Surv(stan_data$obstime, stan_data$status) ~ stan_data$covariate)
@@ -107,17 +107,16 @@ Bayesian_Survival <- function(stan_data, baseline = "PH", niter = 10000, nwarmup
       matrix[N_cens, K] x_cens; // covariates for censored obs
   }
   parameters {
-    real<lower=0> lambda; // baseline rate parameter
+    real<lower=0> shape; 
+    real<lower=0> scale;
     vector[K] beta; // slopes without intercept
-
   }
   model {
-    lambda ~ lognormal(0, 1); // prior
+    shape ~ lognormal(0, 1); // prior
+    scale ~ lognormal(0, 1); // prior
     beta ~ normal(0, 2); // prior
-    t ~ exponential(lambda * exp(x * beta))
-
-    // target += exponential_lpdf(t | lambda * exp(x * beta));
-    target += exponential_lccdf(t_cens | lambda * exp(x_cens * beta)); //log complementary cumulative distribution function (log-CCDF) for an exponential distribution
+    t ~ weibull(shape, scale * exp(x * beta)); 
+    target += weibull_lccdf(t_cens | shape, scale * exp(x_cens * beta)); //log complementary cumulative distribution function (log-CCDF) for an weibull distribution
 
   }
 "
@@ -139,7 +138,7 @@ Bayesian_Survival <- function(stan_data, baseline = "PH", niter = 10000, nwarmup
   
 }
 
-Output <- Bayesian_Survival(stan_data = stan_data, baseline = "exponential")
+Output <- Bayesian_Survival(stan_data = stan_data, baseline = "weibull")
 print(Output)
 ```
 ## Conclusion for STEP 3: the betas are correctly estimated via bayesian cox regression, meaning that bayesian cox regression was correctly defined.
